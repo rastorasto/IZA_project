@@ -9,41 +9,39 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
 
     var body: some View {
         TabView {
+            // Game tab
             NavigationStack {
                 GameView()
                     .navigationTitle("Word Guessing Game")
                     .navigationBarTitleDisplayMode(.inline)
             }
             .tabItem {
-                Label("Play", systemImage: "text.bubble")
-            }
-            NavigationStack {
-                StatsView()
-                }
-                        .tabItem {
-                            Label("Stats", systemImage: "list.clipboard")
+                Label("Play", systemImage: "gamecontroller")
             }
             
+            // Stats tab
             NavigationStack {
-                // List all bundled words
-                List(Words.shared.allWords, id: \.self) { word in
-                    Text(word)
-                }
-                .navigationTitle("All Words")
-                .navigationBarTitleDisplayMode(.inline)
+                StatsView()
             }
             .tabItem {
-                Label("Words", systemImage: "text.book.closed")
+                Label("Stats", systemImage: "chart.bar")
+            }
+            
+            // Dictionary tab
+            NavigationStack {
+                WordsListView()
+            }
+            .tabItem {
+                Label("Words", systemImage: "book.closed")
             }
         }
   }
 }
 
+// This is here to make the preview canvas in xcode work
 struct ContentView_Previews: PreviewProvider {
   static var previews: some View {
     ContentView()

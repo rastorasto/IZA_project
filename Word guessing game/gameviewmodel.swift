@@ -6,35 +6,47 @@
 //
 import SwiftUI
 
+// State of the letter tiles
 enum TileState {
-    case empty, correct, present, absent
+    case empty, correct, present, absent // Enum for all the options
 
+    // Returns the color for each tile
     var color: Color {
         switch self {
-        case .empty: return Color(.systemGray6)
+        case .empty: return Color(.systemGray4)
         case .correct: return .green
         case .present: return .yellow
         case .absent:  return .gray
         }
     }
+    var textColor: Color { // Depending on the system theme light/dark the text color is changed
+        switch self {
+        case .empty:
+            return .primary
+        default:
+            return .black
+        }
+    }
 }
 
 class GameViewModel: ObservableObject {
-    @Published var grid = Array(repeating: Array(repeating: "", count: 5), count: 5)
-    @Published var states = Array(repeating: Array(repeating: TileState.empty, count: 5), count: 5)
-    @Published var word: String
+    @Published var grid = Array(repeating: Array(repeating: "", count: 5), count: 5) // Grid of tiles
+    @Published var states = Array(repeating: Array(repeating: TileState.empty, count: 5), count: 5) // States of the tiles
+    @Published var word: String // The word that the user is guessing
     @Published var currentRow = 0
     @Published var currentCol = 0
+    // Variables that hold the game state
     @Published var isGameWon = false
     @Published var showInvalidWordAlert = false
     @Published var isGameOver = false
 
     
+    // Persistent storage that hold the variables used in statistics tab
     @AppStorage("gamesWon") var gamesWon = 0
     @AppStorage("gamesPlayed") var gamesPlayed = 0
     @AppStorage("guessedWords") var guessedWordsData: String = "[]"
 
-    var guessedWords: [String] {
+    var guessedWords: [String] { // Accessing guessed words array
         get {
             (try? JSONDecoder().decode([String].self, from: Data(guessedWordsData.utf8))) ?? []
         }
@@ -45,13 +57,14 @@ class GameViewModel: ObservableObject {
         }
     }
 
-    init() {
+    init() { // Initializer that randomly chooses the word
         let words = Words.shared.allWords
-        word = words.randomElement()?.uppercased() ?? "APPLE"
-        print(word)
+        word = words.randomElement()?.uppercased() ?? "APPLE" // Fallback word should not happen but just to sure
+        print(word) // Prints the word into console for debugging
     }
     
-    func resetGame() {
+    func resetGame() { // New game
+        // Cleares the tiles and sets the variables to start
         grid = Array(repeating: Array(repeating: "", count: 5), count: 5)
         states = Array(repeating: Array(repeating: TileState.empty, count: 5), count: 5)
         currentRow = 0
@@ -63,48 +76,38 @@ class GameViewModel: ObservableObject {
         // Pick a new random word
         let words = Words.shared.allWords
         word = words.randomElement()?.uppercased() ?? "APPLE"
+        print(word) // Prints the word into console for debugging
     }
 
+    // Removes the last letter from the tiles
     func deleteLastLetter() {
-        print("Delete called - current row: \(currentRow), col: \(currentCol)")
         guard currentCol > 0, !isGameOver else {
-            print("Cannot delete - col: \(currentCol), gameOver: \(isGameOver)")
             return
         }
         currentCol -= 1
         grid[currentRow][currentCol] = ""
-        print("After delete - grid: \(grid[currentRow])")
     }
     
+    // Inserts the letter into the tiles
     func insert(letter: String) {
-        // Debug print to see what's being inserted
-        print("Inserting letter: '\(letter)' at row: \(currentRow), col: \(currentCol)")
-        
         guard currentRow < 5, !isGameOver else {
-            print("Game over or invalid row")
             return
         }
 
-//        if letter == "⌫" { // Handle backspace (delete)
-//            deleteLastLetter()
-//            return
-//        }
-
         guard currentCol < 5 else {
-            print("Column full")
             return
         }
         
         grid[currentRow][currentCol] = letter.uppercased()
-        print("Grid updated: \(grid[currentRow])")
         currentCol += 1
 
-        if currentCol == 5 {
+        if currentCol == 5 { // If it was the last letter check the row
             let guess = grid[currentRow].joined().uppercased()
-            print("Complete word: \(guess)")
             if Words.shared.allWords.contains(guess.lowercased()) {
+                // If the word is valid check if it matches the guessed word
                 checkCurrentRow()
             } else {
+                // If the letter is not valid remove all the letters from tiles and show the popup message
                 showInvalidWordAlert = true
                 for _ in 0..<5 {
                     deleteLastLetter()
@@ -113,36 +116,45 @@ class GameViewModel: ObservableObject {
         }
     }
 
+    // Checks the current row
     func checkCurrentRow() {
         let guess = grid[currentRow].joined()
         let result = evaluate(guess: guess, against: word)
         states[currentRow] = result
 
-        // Save guess and increment games played
-        var updatedGuesses = guessedWords
-        updatedGuesses.append(guess)
-        guessedWords = updatedGuesses
-        gamesPlayed += 1
-
-        if result.allSatisfy({ $0 == .correct }) {
+        if result.allSatisfy({ $0 == .correct }) { // If all the letters match the game is won, the data is added to the statistics
             isGameWon = true
             isGameOver = true
             gamesWon += 1
-        } else if currentRow >= 4 {
-            // Game over - used all attempts
+            gamesPlayed += 1
+            saveGuess(guess)
+        } else if currentRow >= 4 { // If the user used all rows and he lost save the statistics and show the message
             isGameOver = true
-        } else {
+            gamesPlayed += 1
+            saveGuess(word)
+        } else { // Else go to the next row
             currentRow += 1
             currentCol = 0
         }
     }
+
+
+
+    // Adds the guess into the persistent storage
+    private func saveGuess(_ guess: String) {
+        var updatedGuesses = guessedWords
+        updatedGuesses.append(guess.uppercased())
+        guessedWords = updatedGuesses
+    }
+
     
 
+    // Evaluates the row
     func evaluate(guess: String, against answer: String) -> [TileState] {
         var result = [TileState](repeating: .absent, count: 5)
         var freq = Dictionary(answer.map { ($0, 1) }, uniquingKeysWith: +)
 
-        // First pass: correct
+        // First checks for the correct letters with correct position
         for i in 0..<5 {
             if guess[i] == answer[i] {
                 result[i] = .correct
@@ -150,7 +162,7 @@ class GameViewModel: ObservableObject {
             }
         }
 
-        // Second pass: present
+        // Then checks for letters that are present in the guessed word
         for i in 0..<5 {
             if result[i] == .correct { continue }
             let ch = guess[i]
@@ -164,7 +176,7 @@ class GameViewModel: ObservableObject {
     }
 }
 
-private extension String {
+private extension String { // String extension to allow easy access to individual characters 
     subscript(i: Int) -> Character {
         self[index(startIndex, offsetBy: i)]
     }
